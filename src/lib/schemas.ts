@@ -1,4 +1,6 @@
 import { RecurrenceRule, SplitMode } from '@prisma/client'
+import Decimal from 'decimal.js'
+
 import * as z from 'zod'
 
 export const groupFormSchema = z
@@ -32,6 +34,19 @@ export const groupFormSchema = z
 
 export type GroupFormValues = z.infer<typeof groupFormSchema>
 
+const inputCoercedToNumber = z.union([
+  z.number(),
+  z.string().transform((value, ctx) => {
+    const valueAsNumber = Number(value)
+    if (Number.isNaN(valueAsNumber))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'invalidNumber',
+      })
+    return valueAsNumber
+  }),
+])
+
 export const expenseFormSchema = z
   .object({
     expenseDate: z.coerce.date(),
@@ -55,11 +70,27 @@ export const expenseFormSchema = z
       )
       .refine((amount) => amount != 0, 'amountNotZero')
       .refine((amount) => amount <= 10_000_000_00, 'amountTenMillion'),
+    originalAmount: z
+      .union([
+        z.literal('').transform(() => undefined),
+        inputCoercedToNumber
+          .refine((amount) => amount != 0, 'amountNotZero')
+          .refine((amount) => amount <= 10_000_000_00, 'amountTenMillion'),
+      ])
+      .optional(),
+    originalCurrency: z.union([z.string().length(3).nullish(), z.literal('')]),
+    conversionRate: z
+      .union([
+        z.literal('').transform(() => undefined),
+        inputCoercedToNumber.refine((amount) => amount > 0, 'ratePositive'),
+      ])
+      .optional(),
     paidBy: z.string({ required_error: 'paidByRequired' }),
     paidFor: z
       .array(
         z.object({
           participant: z.string(),
+          originalAmount: z.string().optional(), // For converting shares by amounts in original currency, not saved.
           shares: z.union([
             z.number(),
             z.string().transform((value, ctx) => {
@@ -119,14 +150,14 @@ export const expenseFormSchema = z
         break // noop
       case 'BY_AMOUNT': {
         const sum = expense.paidFor.reduce(
-          (sum, { shares }) => sum + Number(shares),
-          0,
+          (sum, { shares }) => new Decimal(shares).add(sum),
+          new Decimal(0),
         )
-        if (sum !== expense.amount) {
-          const detail =
-            sum < expense.amount
-              ? `${((expense.amount - sum) / 100).toFixed(2)} missing`
-              : `${((sum - expense.amount) / 100).toFixed(2)} surplus`
+        if (!sum.equals(new Decimal(expense.amount))) {
+          // const detail =
+          //   sum < expense.amount
+          //     ? `${((expense.amount - sum) / 100).toFixed(2)} missing`
+          //     : `${((sum - expense.amount) / 100).toFixed(2)} surplus`
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: 'amountSum',
@@ -163,17 +194,18 @@ export const expenseFormSchema = z
     // Format the share split as a number (if from form submission)
     return {
       ...expense,
-      paidFor: expense.paidFor.map(({ participant, shares }) => {
+      paidFor: expense.paidFor.map((paidFor) => {
+        const shares = paidFor.shares
         if (typeof shares === 'string' && expense.splitMode !== 'BY_AMOUNT') {
           // For splitting not by amount, preserve the previous behaviour of multiplying the share by 100
           return {
-            participant,
+            ...paidFor,
             shares: Math.round(Number(shares) * 100),
           }
         }
         // Otherwise, no need as the number will have been formatted according to currency.
         return {
-          participant,
+          ...paidFor,
           shares: Number(shares),
         }
       }),
