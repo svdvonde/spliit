@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Reimbursement } from '@/lib/balances'
 import { Currency } from '@/lib/currency'
 import { formatCurrency } from '@/lib/utils'
-import { Participant } from '@prisma/client'
+import { Participant } from '@/db/types'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 

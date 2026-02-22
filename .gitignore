@@ -42,7 +42,7 @@ postgres-data
 
 
 # custom
-prisma-sqlite-data
+sqlite-data
 .idea
 wrangler.jsonc
 .open-next

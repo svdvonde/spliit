@@ -1,7 +1,7 @@
 import { getCurrency } from '@/lib/currency'
+import { getGroup, getGroupExpenses } from '@/lib/api'
 import { formatAmountAsDecimal, getCurrencyFromGroup } from '@/lib/utils'
 import { Parser } from '@json2csv/plainjs'
-import { PrismaClient } from '@prisma/client'
 import contentDisposition from 'content-disposition'
 import { NextResponse } from 'next/server'
 
@@ -20,42 +20,18 @@ function formatDate(isoDateString: Date): string {
   return `${year}-${month}-${day}` // YYYY-MM-DD format
 }
 
-const prisma = new PrismaClient()
-
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ groupId: string }> },
 ) {
   const { groupId } = await params
-  const group = await prisma.group.findUnique({
-    where: { id: groupId },
-    select: {
-      id: true,
-      name: true,
-      currency: true,
-      currencyCode: true,
-      expenses: {
-        select: {
-          expenseDate: true,
-          title: true,
-          category: { select: { name: true } },
-          amount: true,
-          originalAmount: true,
-          originalCurrency: true,
-          conversionRate: true,
-          paidById: true,
-          paidFor: { select: { participantId: true, shares: true } },
-          isReimbursement: true,
-          splitMode: true,
-        },
-      },
-      participants: { select: { id: true, name: true } },
-    },
-  })
+  const group = await getGroup(groupId)
 
   if (!group) {
     return NextResponse.json({ error: 'Invalid group ID' }, { status: 404 })
   }
+
+  const expenses = await getGroupExpenses(groupId)
 
   /*
 
@@ -102,7 +78,7 @@ export async function GET(
 
   const currency = getCurrencyFromGroup(group)
 
-  const expenses = group.expenses.map((expense) => ({
+  const expenseRows = expenses.map((expense) => ({
     date: formatDate(expense.expenseDate),
     title: expense.title,
     categoryName: expense.category?.name || '',
@@ -115,17 +91,15 @@ export async function GET(
         )
       : null,
     originalCurrency: expense.originalCurrency,
-    conversionRate: expense.conversionRate
-      ? expense.conversionRate.toString()
-      : null,
+    conversionRate: expense.conversionRate ? expense.conversionRate : null,
     isReimbursement: expense.isReimbursement ? 'Yes' : 'No',
     splitMode: splitModeLabel[expense.splitMode],
     ...Object.fromEntries(
       group.participants.map((participant) => {
         const { totalShares, participantShare } = expense.paidFor.reduce(
-          (acc, { participantId, shares }) => {
+          (acc, { participant: paidForParticipant, shares }) => {
             acc.totalShares += shares
-            if (participantId === participant.id) {
+            if (paidForParticipant.id === participant.id) {
               acc.participantShare = shares
             }
             return acc
@@ -133,7 +107,7 @@ export async function GET(
           { totalShares: 0, participantShare: 0 },
         )
 
-        const isPaidByParticipant = expense.paidById === participant.id
+        const isPaidByParticipant = expense.paidBy.id === participant.id
         const participantAmountShare = +formatAmountAsDecimal(
           (expense.amount / totalShares) * participantShare,
           currency,
@@ -148,7 +122,7 @@ export async function GET(
   }))
 
   const json2csvParser = new Parser({ fields })
-  const csv = json2csvParser.parse(expenses)
+  const csv = json2csvParser.parse(expenseRows)
 
   const date = new Date().toISOString().split('T')[0]
   const filename = `Spliit Export - ${group.name} - ${date}.csv`

@@ -15,8 +15,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { Category } from '@/db/types'
 import { useMediaQuery } from '@/lib/hooks'
-import { Category } from '@prisma/client'
 import { useTranslations } from 'next-intl'
 import { forwardRef, useEffect, useState } from 'react'
 
@@ -54,8 +54,7 @@ export function CategorySelector({
           <CategoryButton
             category={selectedCategory}
             open={open}
-            isLoading={isLoading}
-          />
+            isLoading={isLoading}          />
         </PopoverTrigger>
         <PopoverContent className="p-0" align="start">
           <CategoryCommand

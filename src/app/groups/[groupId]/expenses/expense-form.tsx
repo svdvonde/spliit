@@ -1,4 +1,5 @@
 import { CategorySelector } from '@/components/category-selector'
+import { RecurrenceRule } from '@/db/types'
 import { CurrencySelector } from '@/components/currency-selector'
 import { ExpenseDocumentsInput } from '@/components/expense-documents-input'
 import { SubmitButton } from '@/components/submit-button'
@@ -53,7 +54,6 @@ import {
 } from '@/lib/utils'
 import { AppRouterOutput } from '@/trpc/routers/_app'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { RecurrenceRule } from '@prisma/client'
 import { ChevronRight, Save } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -192,7 +192,9 @@ export function ExpenseForm({
           amount: amountAsDecimal(expense.amount, groupCurrency),
           originalCurrency: expense.originalCurrency ?? group.currencyCode,
           originalAmount: expense.originalAmount ?? undefined,
-          conversionRate: expense.conversionRate?.toNumber(),
+          conversionRate: expense.conversionRate
+            ? Number(expense.conversionRate)
+            : undefined,
           category: expense.categoryId,
           paidBy: expense.paidById,
           paidFor: expense.paidFor.map(({ participantId, shares }) => ({

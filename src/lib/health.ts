@@ -1,4 +1,5 @@
-import { prisma } from '@/lib/prisma'
+import { getLocalDb } from '@/db/db'
+import { sql } from 'drizzle-orm'
 
 export interface HealthCheckStatus {
   status: 'healthy' | 'unhealthy'
@@ -16,7 +17,8 @@ async function checkDatabase(): Promise<{
 }> {
   try {
     // Simple query to test database connectivity
-    await prisma.$queryRaw`SELECT 1`
+    const db = getLocalDb()
+    await db.run(sql`SELECT 1`)
     return {
       status: 'healthy',
     }

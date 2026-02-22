@@ -1,4 +1,9 @@
-import { RecurrenceRule, SplitMode } from '@prisma/client'
+import {
+  RecurrenceRule,
+  RecurrenceRuleValues,
+  SplitMode,
+  SplitModeValues,
+} from '@/db/types'
 import Decimal from 'decimal.js'
 
 import * as z from 'zod'
@@ -118,11 +123,7 @@ export const expenseFormSchema = z
           }
         }
       }),
-    splitMode: z
-      .enum<SplitMode, [SplitMode, ...SplitMode[]]>(
-        Object.values(SplitMode) as any,
-      )
-      .default('EVENLY'),
+    splitMode: z.enum(SplitModeValues).default('EVENLY'),
     saveDefaultSplittingOptions: z.boolean(),
     isReimbursement: z.boolean(),
     documents: z
@@ -136,11 +137,7 @@ export const expenseFormSchema = z
       )
       .default([]),
     notes: z.string().optional(),
-    recurrenceRule: z
-      .enum<RecurrenceRule, [RecurrenceRule, ...RecurrenceRule[]]>(
-        Object.values(RecurrenceRule) as any,
-      )
-      .default('NONE'),
+    recurrenceRule: z.enum(RecurrenceRuleValues).default('NONE'),
   })
   .superRefine((expense, ctx) => {
     switch (expense.splitMode) {
