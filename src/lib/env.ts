@@ -1,4 +1,4 @@
-import { ZodIssueCode, z } from 'zod'
+import { ZodIssueCode,z } from 'zod'
 
 const interpretEnvVarAsBool = (val: unknown): boolean => {
   if (typeof val !== 'string') return false
@@ -7,8 +7,11 @@ const interpretEnvVarAsBool = (val: unknown): boolean => {
 
 const envSchema = z
   .object({
-    POSTGRES_URL_NON_POOLING: z.string().url(),
-    POSTGRES_PRISMA_URL: z.string().url(),
+    DATABASE_PROVIDER: z
+      .enum(['none', 'sqlite'])
+      .optional()
+      .default('none'),
+    SQLITE_URL: z.string().optional(),
     NEXT_PUBLIC_BASE_URL: z
       .string()
       .optional()
@@ -38,6 +41,12 @@ const envSchema = z
     OPENAI_API_KEY: z.string().optional(),
   })
   .superRefine((env, ctx) => {
+    if (env.DATABASE_PROVIDER === 'sqlite' && !env.SQLITE_URL) {
+      ctx.addIssue({
+        code: ZodIssueCode.custom,
+        message: 'SQLITE_URL is required when DATABASE_PROVIDER is "sqlite"',
+      })
+    }
     if (
       env.NEXT_PUBLIC_ENABLE_EXPENSE_DOCUMENTS &&
       // S3_UPLOAD_ENDPOINT is fully optional as it will only be used for providers other than AWS

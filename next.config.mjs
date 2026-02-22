@@ -1,4 +1,4 @@
-import createNextIntlPlugin from 'next-intl/plugin'
+import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin()
 
@@ -25,14 +25,14 @@ if (process.env.S3_UPLOAD_ENDPOINT) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    remotePatterns
+    remotePatterns,
   },
   // Required to run in a codespace (see https://github.com/vercel/next.js/issues/58019)
   experimental: {
     serverActions: {
-        allowedOrigins: ['localhost:3000'],
+      allowedOrigins: ['localhost:3000'],
     },
-},
+  },
 }
 
 export default withNextIntl(nextConfig)

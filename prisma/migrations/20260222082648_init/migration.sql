@@ -1,20 +1,102 @@
-/*
-  Warnings:
+-- CreateTable
+CREATE TABLE "Group" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "information" TEXT,
+    "currency" TEXT NOT NULL DEFAULT '$',
+    "currencyCode" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
-  - Added the required column `categoryId` to the `Expense` table without a default value. This is not possible if the table is not empty.
-
-*/
--- AlterTable
-ALTER TABLE "Expense" ADD COLUMN     "categoryId" INTEGER NOT NULL DEFAULT 0;
+-- CreateTable
+CREATE TABLE "Participant" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "groupId" TEXT NOT NULL,
+    CONSTRAINT "Participant_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
 
 -- CreateTable
 CREATE TABLE "Category" (
-    "id" SERIAL NOT NULL,
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "grouping" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-
-    CONSTRAINT "Category_pkey" PRIMARY KEY ("id")
+    "name" TEXT NOT NULL
 );
+
+-- CreateTable
+CREATE TABLE "Expense" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "expenseDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "title" TEXT NOT NULL,
+    "categoryId" INTEGER NOT NULL DEFAULT 0,
+    "amount" INTEGER NOT NULL,
+    "originalAmount" INTEGER,
+    "originalCurrency" TEXT,
+    "conversionRate" DECIMAL,
+    "paidById" TEXT NOT NULL,
+    "groupId" TEXT NOT NULL,
+    "isReimbursement" BOOLEAN NOT NULL DEFAULT false,
+    "splitMode" TEXT NOT NULL DEFAULT 'EVENLY',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "notes" TEXT,
+    "recurrenceRule" TEXT DEFAULT 'NONE',
+    "recurringExpenseLinkId" TEXT,
+    CONSTRAINT "Expense_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Expense_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Expense_paidById_fkey" FOREIGN KEY ("paidById") REFERENCES "Participant" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ExpenseDocument" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "url" TEXT NOT NULL,
+    "width" INTEGER NOT NULL,
+    "height" INTEGER NOT NULL,
+    "expenseId" TEXT,
+    CONSTRAINT "ExpenseDocument_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "RecurringExpenseLink" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "groupId" TEXT NOT NULL,
+    "currentFrameExpenseId" TEXT NOT NULL,
+    "nextExpenseCreatedAt" DATETIME,
+    "nextExpenseDate" DATETIME NOT NULL,
+    CONSTRAINT "RecurringExpenseLink_currentFrameExpenseId_fkey" FOREIGN KEY ("currentFrameExpenseId") REFERENCES "Expense" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ExpensePaidFor" (
+    "expenseId" TEXT NOT NULL,
+    "participantId" TEXT NOT NULL,
+    "shares" INTEGER NOT NULL DEFAULT 1,
+
+    PRIMARY KEY ("expenseId", "participantId"),
+    CONSTRAINT "ExpensePaidFor_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "ExpensePaidFor_participantId_fkey" FOREIGN KEY ("participantId") REFERENCES "Participant" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Activity" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "groupId" TEXT NOT NULL,
+    "time" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "activityType" TEXT NOT NULL,
+    "participantId" TEXT,
+    "expenseId" TEXT,
+    "data" TEXT,
+    CONSTRAINT "Activity_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RecurringExpenseLink_currentFrameExpenseId_key" ON "RecurringExpenseLink"("currentFrameExpenseId");
+
+-- CreateIndex
+CREATE INDEX "RecurringExpenseLink_groupId_idx" ON "RecurringExpenseLink"("groupId");
+
+-- CreateIndex
+CREATE INDEX "RecurringExpenseLink_groupId_nextExpenseCreatedAt_nextExpenseDate_idx" ON "RecurringExpenseLink"("groupId", "nextExpenseCreatedAt", "nextExpenseDate" DESC);
 
 -- Insert categories
 INSERT INTO "Category" ("id", "grouping", "name") VALUES (0, 'Uncategorized', 'General');
@@ -60,6 +142,4 @@ INSERT INTO "Category" ("id", "grouping", "name") VALUES (39, 'Utilities', 'Heat
 INSERT INTO "Category" ("id", "grouping", "name") VALUES (40, 'Utilities', 'Trash');
 INSERT INTO "Category" ("id", "grouping", "name") VALUES (41, 'Utilities', 'TV/Phone/Internet');
 INSERT INTO "Category" ("id", "grouping", "name") VALUES (42, 'Utilities', 'Water');
-
--- AddForeignKey
-ALTER TABLE "Expense" ADD CONSTRAINT "Expense_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+INSERT INTO "Category" ("id", "grouping", "name") VALUES (43, 'Life', 'Donation');

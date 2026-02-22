@@ -39,3 +39,11 @@ next-env.d.ts
 
 # db
 postgres-data
+
+
+# custom
+prisma-sqlite-data
+.idea
+wrangler.jsonc
+.open-next
+
