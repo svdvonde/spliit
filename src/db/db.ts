@@ -1,28 +1,16 @@
-import { createClient } from '@libsql/client'
-import { drizzle as drizzleD1 } from 'drizzle-orm/d1'
-import { drizzle as drizzleLibsql } from 'drizzle-orm/libsql'
+import { drizzle } from 'drizzle-orm/d1';
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 
-import { env } from '@/lib/env'
+export const getDb = () => {
+  const processEnvDb = (process.env as any).DB as D1Database | undefined
+  if (processEnvDb?.prepare) {
+    return drizzle(processEnvDb)
+  }
 
-import * as schema from './schema'
+  const contextDb = getCloudflareContext().env.DB as D1Database | undefined
+  if (contextDb?.prepare) {
+    return drizzle(contextDb)
+  }
 
-export const createD1Db = (binding: Parameters<typeof drizzleD1>[0]) =>
-	drizzleD1(binding, { schema })
-
-export const createDb = createD1Db
-
-let localDb: ReturnType<typeof drizzleLibsql> | null = null
-
-export const getLocalDb = () => {
-	if (localDb) {
-		return localDb
-	}
-
-	if (!env.SQLITE_URL) {
-		throw new Error('SQLITE_URL is required for local Drizzle database usage.')
-	}
-
-	const client = createClient({ url: env.SQLITE_URL })
-	localDb = drizzleLibsql(client, { schema })
-	return localDb
+  throw new Error('Cloudflare D1 binding "DB" is not available in the current runtime context')
 }

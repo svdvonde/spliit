@@ -1,4 +1,4 @@
-import { getLocalDb } from '@/db/db'
+import { getDb } from '@/db/db'
 import { sql } from 'drizzle-orm'
 
 export interface HealthCheckStatus {
@@ -17,7 +17,7 @@ async function checkDatabase(): Promise<{
 }> {
   try {
     // Simple query to test database connectivity
-    const db = getLocalDb()
+    const db = getDb()
     await db.run(sql`SELECT 1`)
     return {
       status: 'healthy',

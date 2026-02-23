@@ -14,14 +14,19 @@
     "start-container": "docker compose --env-file container.env up",
     "test": "jest",
     "generate-currency-data": "ts-node -T ./src/scripts/generateCurrencyData.ts",
-    "drizzle-make-migrations": "node --env-file=.env ./node_modules/drizzle-kit/bin.cjs generate",
-    "drizzle-migrate": "node --env-file=.env ./node_modules/drizzle-kit/bin.cjs migrate"
+    "drizzle:make-migrations": "drizzle-kit generate",
+    "cloudflare:migrate:local": "wrangler d1 migrations apply spliit-db --local",
+    "cloudflare:migrate:remote": "wrangler d1 migrations apply spliit-db --remote",
+    "cloudflare:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cloudflare:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "^0.5.4",
     "@hookform/resolvers": "^3.3.2",
     "@json2csv/plainjs": "^7.0.6",
     "@libsql/client": "^0.17.0",
+    "@opennextjs/cloudflare": "^1.16.5",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -75,6 +80,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@nerdfolio/drizzle-d1-helpers": "^0.1.5",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.3.0",
@@ -101,6 +107,7 @@
     "tailwindcss": "^3",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "wrangler": "^4.67.1"
   }
 }

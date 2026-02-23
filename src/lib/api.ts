@@ -1,10 +1,10 @@
-import { getLocalDb } from '@/db/db'
+import { getDb } from '@/db/db'
 import {
   activity as activityTable,
   category as categoryTable,
-  expense as expenseTable,
   expenseDocument as expenseDocumentTable,
   expensePaidFor as expensePaidForTable,
+  expense as expenseTable,
   group as groupTable,
   participant as participantTable,
   recurringExpenseLink as recurringExpenseLinkTable,
@@ -16,27 +16,25 @@ import {
   type SplitMode,
 } from '@/db/types'
 import { ExpenseFormValues, GroupFormValues } from '@/lib/schemas'
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  inArray,
-  isNull,
-  lte,
-  sql,
-} from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 
 export function randomId() {
-  return nanoid()}
+  return nanoid()
+}
 
+const runTransaction = async <T>(
+  db: ReturnType<typeof getDb>,
+  callback: (tx: ReturnType<typeof getDb>) => Promise<T>,
+): Promise<T> => {
+  return callback(db)
+}
 
 export async function createGroup(groupFormValues: GroupFormValues) {
-  const db = getLocalDb()
+  const db = getDb()
   const groupId = randomId()
 
-  await db.transaction(async (tx) => {
+  await runTransaction(db, async (tx) => {
     await tx.insert(groupTable).values({
       id: groupId,
       name: groupFormValues.name,
@@ -66,7 +64,7 @@ export async function createExpense(
   groupId: string,
   participantId?: string,
 ) {
-  const db = getLocalDb()
+  const db = getDb()
 
   const group = await getGroup(groupId)
   if (!group) throw new Error(`Invalid group ID: ${groupId}`)
@@ -81,7 +79,7 @@ export async function createExpense(
   }
 
   const expenseId = randomId()
-  const categoryId = expenseFormValues.category;
+  const categoryId = expenseFormValues.category
 
   await logActivity(groupId, ActivityType.CREATE_EXPENSE, {
     participantId,
@@ -89,9 +87,10 @@ export async function createExpense(
     data: expenseFormValues.title,
   })
 
-  const isCreateRecurrence = expenseFormValues.recurrenceRule !== RecurrenceRule.NONE
+  const isCreateRecurrence =
+    expenseFormValues.recurrenceRule !== RecurrenceRule.NONE
 
-  await db.transaction(async (tx) => {
+  await runTransaction(db, async (tx) => {
     await tx.insert(expenseTable).values({
       id: expenseId,
       groupId,
@@ -152,7 +151,7 @@ export async function deleteExpense(
   expenseId: string,
   participantId?: string,
 ) {
-  const db = getLocalDb()
+  const db = getDb()
 
   const existingExpense = await getExpense(groupId, expenseId)
   await logActivity(groupId, ActivityType.DELETE_EXPENSE, {
@@ -163,7 +162,9 @@ export async function deleteExpense(
 
   await db
     .delete(expenseTable)
-    .where(and(eq(expenseTable.id, expenseId), eq(expenseTable.groupId, groupId)))
+    .where(
+      and(eq(expenseTable.id, expenseId), eq(expenseTable.groupId, groupId)),
+    )
 }
 
 export async function getGroupExpensesParticipants(groupId: string) {
@@ -181,7 +182,7 @@ export async function getGroupExpensesParticipants(groupId: string) {
 export async function getGroups(groupIds: string[]) {
   if (groupIds.length === 0) return []
 
-  const db = getLocalDb()
+  const db = getDb()
   const groups = await db
     .select()
     .from(groupTable)
@@ -190,7 +191,7 @@ export async function getGroups(groupIds: string[]) {
   const participantCounts = await db
     .select({
       groupId: participantTable.groupId,
-      participantCount: sql<number>`count(*)`,
+      participantCount: count(),
     })
     .from(participantTable)
     .where(inArray(participantTable.groupId, groupIds))
@@ -215,7 +216,7 @@ export async function updateExpense(
   expenseFormValues: ExpenseFormValues,
   participantId?: string,
 ) {
-  const db = getLocalDb()
+  const db = getDb()
 
   const group = await getGroup(groupId)
   if (!group) throw new Error(`Invalid group ID: ${groupId}`)
@@ -257,9 +258,9 @@ export async function updateExpense(
     existingExpense.expenseDate,
   )
 
-  const categoryId = expenseFormValues.category;
+  const categoryId = expenseFormValues.category
 
-  await db.transaction(async (tx) => {
+  await runTransaction(db, async (tx) => {
     await tx
       .update(expenseTable)
       .set({
@@ -287,7 +288,10 @@ export async function updateExpense(
           shares: paidFor.shares,
         })
         .onConflictDoUpdate({
-          target: [expensePaidForTable.expenseId, expensePaidForTable.participantId],
+          target: [
+            expensePaidForTable.expenseId,
+            expensePaidForTable.participantId,
+          ],
           set: {
             shares: paidFor.shares,
           },
@@ -332,13 +336,23 @@ export async function updateExpense(
         .set({
           nextExpenseDate: updatedRecurrenceExpenseLinkNextExpenseDate,
         })
-        .where(eq(recurringExpenseLinkTable.id, existingExpense.recurringExpenseLink.id))
+        .where(
+          eq(
+            recurringExpenseLinkTable.id,
+            existingExpense.recurringExpenseLink.id,
+          ),
+        )
     }
 
     if (isDeleteRecurrenceExpenseLink && existingExpense.recurringExpenseLink) {
       await tx
         .delete(recurringExpenseLinkTable)
-        .where(eq(recurringExpenseLinkTable.id, existingExpense.recurringExpenseLink.id))
+        .where(
+          eq(
+            recurringExpenseLinkTable.id,
+            existingExpense.recurringExpenseLink.id,
+          ),
+        )
     }
 
     for (const document of expenseFormValues.documents) {
@@ -362,8 +376,12 @@ export async function updateExpense(
         })
     }
 
-    const currentDocumentIds = existingExpense.documents.map((document) => document.id)
-    const nextDocumentIds = expenseFormValues.documents.map((document) => document.id)
+    const currentDocumentIds = existingExpense.documents.map(
+      (document) => document.id,
+    )
+    const nextDocumentIds = expenseFormValues.documents.map(
+      (document) => document.id,
+    )
     const documentIdsToDelete = currentDocumentIds.filter(
       (id) => !nextDocumentIds.includes(id),
     )
@@ -388,14 +406,14 @@ export async function updateGroup(
   groupFormValues: GroupFormValues,
   participantId?: string,
 ) {
-  const db = getLocalDb()
+  const db = getDb()
 
   const existingGroup = await getGroup(groupId)
   if (!existingGroup) throw new Error('Invalid group ID')
 
   await logActivity(groupId, ActivityType.UPDATE_GROUP, { participantId })
 
-  await db.transaction(async (tx) => {
+  await runTransaction(db, async (tx) => {
     await tx
       .update(groupTable)
       .set({
@@ -406,13 +424,17 @@ export async function updateGroup(
       })
       .where(eq(groupTable.id, groupId))
 
-    const existingParticipantIds = existingGroup.participants.map((participant) => participant.id)
+    const existingParticipantIds = existingGroup.participants.map(
+      (participant) => participant.id,
+    )
     const nextParticipantsWithIds = groupFormValues.participants.filter(
       (participant): participant is { id: string; name: string } =>
         participant.id !== undefined,
     )
 
-    const nextParticipantIds = nextParticipantsWithIds.map((participant) => participant.id)
+    const nextParticipantIds = nextParticipantsWithIds.map(
+      (participant) => participant.id,
+    )
 
     const participantIdsToDelete = existingParticipantIds.filter(
       (id) => !nextParticipantIds.includes(id),
@@ -456,9 +478,13 @@ export async function updateGroup(
 }
 
 export async function getGroup(groupId: string) {
-  const db = getLocalDb()
+  const db = getDb()
 
-  const rows = await db.select().from(groupTable).where(eq(groupTable.id, groupId)).limit(1)
+  const rows = await db
+    .select()
+    .from(groupTable)
+    .where(eq(groupTable.id, groupId))
+    .limit(1)
   const group = rows[0]
   if (!group) return null
 
@@ -474,15 +500,18 @@ export async function getGroup(groupId: string) {
 }
 
 export async function getCategories() {
-  const db = getLocalDb()
-  return db.select().from(categoryTable).orderBy(categoryTable.grouping, categoryTable.name)
+  const db = getDb()
+  return db
+    .select()
+    .from(categoryTable)
+    .orderBy(categoryTable.grouping, categoryTable.name)
 }
 
 export async function getGroupExpenses(
   groupId: string,
   options?: { offset?: number; length?: number; filter?: string },
 ) {
-  const db = getLocalDb()
+  const db = getDb()
 
   await createRecurringExpenses()
 
@@ -543,20 +572,25 @@ export async function getGroupExpenses(
   const documentCounts = await db
     .select({
       expenseId: expenseDocumentTable.expenseId,
-      documentCount: sql<number>`count(*)`,
+      documentCount: count(),
     })
     .from(expenseDocumentTable)
     .where(inArray(expenseDocumentTable.expenseId, expenseIds))
     .groupBy(expenseDocumentTable.expenseId)
 
-  const categoriesById = new Map(categories.map((category) => [category.id, category]))
+  const categoriesById = new Map(
+    categories.map((category) => [category.id, category]),
+  )
   const participantsById = new Map(
     participants.map((participant) => [participant.id, participant]),
   )
   const paidForByExpenseId = new Map<string, Array<(typeof paidFors)[number]>>()
   const documentCountByExpenseId = new Map(
     documentCounts
-      .filter((row): row is { expenseId: string; documentCount: number } => row.expenseId !== null)
+      .filter(
+        (row): row is { expenseId: string; documentCount: number } =>
+          row.expenseId !== null,
+      )
       .map((row) => [row.expenseId, row.documentCount]),
   )
 
@@ -593,7 +627,8 @@ export async function getGroupExpenses(
       },
     })),
     splitMode: expense.splitMode as SplitMode,
-    recurrenceRule: (expense.recurrenceRule ?? RecurrenceRule.NONE) as RecurrenceRuleType,
+    recurrenceRule: (expense.recurrenceRule ??
+      RecurrenceRule.NONE) as RecurrenceRuleType,
     _count: {
       documents: documentCountByExpenseId.get(expense.id) ?? 0,
     },
@@ -601,9 +636,9 @@ export async function getGroupExpenses(
 }
 
 export async function getGroupExpenseCount(groupId: string) {
-  const db = getLocalDb()
+  const db = getDb()
   const result = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: count() })
     .from(expenseTable)
     .where(eq(expenseTable.groupId, groupId))
 
@@ -611,12 +646,14 @@ export async function getGroupExpenseCount(groupId: string) {
 }
 
 export async function getExpense(groupId: string, expenseId: string) {
-  const db = getLocalDb()
+  const db = getDb()
 
   const expenseRows = await db
     .select()
     .from(expenseTable)
-    .where(and(eq(expenseTable.id, expenseId), eq(expenseTable.groupId, groupId)))
+    .where(
+      and(eq(expenseTable.id, expenseId), eq(expenseTable.groupId, groupId)),
+    )
     .limit(1)
 
   const expense = expenseRows[0]
@@ -658,7 +695,8 @@ export async function getExpense(groupId: string, expenseId: string) {
     expenseDate: expense.expenseDate,
     isReimbursement: expense.isReimbursement,
     splitMode: expense.splitMode as SplitMode,
-    recurrenceRule: (expense.recurrenceRule ?? RecurrenceRule.NONE) as RecurrenceRuleType,
+    recurrenceRule: (expense.recurrenceRule ??
+      RecurrenceRule.NONE) as RecurrenceRuleType,
     paidBy: paidByRows[0] ?? null,
     paidFor,
     category: categoryRows[0] ?? null,
@@ -674,7 +712,6 @@ export async function getExpense(groupId: string, expenseId: string) {
       : null,
   }
 }
-
 
 /*
 export async function getActivities(
@@ -712,7 +749,7 @@ export async function getActivities(
   groupId: string,
   options?: { offset?: number; length?: number },
 ) {
-  const db = getLocalDb()
+  const db = getDb()
 
   const activities = await db
     .select()
@@ -755,7 +792,7 @@ export async function logActivity(
   activityType: ActivityType,
   extra?: { participantId?: string; expenseId?: string; data?: string },
 ) {
-  const db = getLocalDb()
+  const db = getDb()
   const id = randomId()
   await db.insert(activityTable).values({
     id,
@@ -770,7 +807,7 @@ export async function logActivity(
 }
 
 async function getRecurringExpenseFrame(expenseId: string) {
-  const db = getLocalDb()
+  const db = getDb()
 
   const expenseRows = await db
     .select()
@@ -801,7 +838,7 @@ async function getRecurringExpenseFrame(expenseId: string) {
 }
 
 async function createRecurringExpenses() {
-  const db = getLocalDb()
+  const db = getDb()
 
   const localDate = new Date()
   const utcDateFromLocal = new Date(
@@ -856,68 +893,65 @@ async function createRecurringExpenses() {
 
       const frame = currentExpenseRecord
 
-      const created = await db
-        .transaction(async (tx) => {
-          await tx.insert(expenseTable).values({
-            id: newExpenseId,
-            groupId: frame.groupId,
-            expenseDate: newExpenseDate,
-            title: frame.title,
-            categoryId: frame.categoryId,
-            amount: frame.amount,
-            originalAmount: frame.originalAmount,
-            originalCurrency: frame.originalCurrency,
-            conversionRate: frame.conversionRate,
-            paidById: frame.paidById,
-            isReimbursement: frame.isReimbursement,
-            splitMode: frame.splitMode,
-            notes: frame.notes,
-            recurrenceRule: frame.recurrenceRule
-          })
-
-          if (frame.paidFor.length > 0) {
-            await tx.insert(expensePaidForTable).values(
-              frame.paidFor.map((paidFor) => ({
-                expenseId: newExpenseId,
-                participantId: paidFor.participantId,
-                shares: paidFor.shares,
-              })),
-            )
-          }
-
-          if (frame.documentIds.length > 0) {
-            await tx
-              .update(expenseDocumentTable)
-              .set({ expenseId: newExpenseId })
-              .where(inArray(expenseDocumentTable.id, frame.documentIds))
-          }
-
-          await tx.insert(recurringExpenseLinkTable).values({
-            id: newRecurringExpenseLinkId,
-            groupId: frame.groupId,
-            currentFrameExpenseId: newExpenseId,
-            nextExpenseDate: newRecurringExpenseNextExpenseDate,
-          })
-
-          await tx
-            .update(recurringExpenseLinkTable)
-            .set({ nextExpenseCreatedAt: newExpenseCreatedAt })
-            .where(
-              and(
-                eq(recurringExpenseLinkTable.id, currentRecurringExpenseLinkId),
-                isNull(recurringExpenseLinkTable.nextExpenseCreatedAt),
-              ),
-            )
-
-          return true
+      const created = await runTransaction(db, async (tx) => {
+        await tx.insert(expenseTable).values({
+          id: newExpenseId,
+          groupId: frame.groupId,
+          expenseDate: newExpenseDate,
+          title: frame.title,
+          categoryId: frame.categoryId,
+          amount: frame.amount,
+          originalAmount: frame.originalAmount,
+          originalCurrency: frame.originalCurrency,
+          conversionRate: frame.conversionRate,
+          paidById: frame.paidById,
+          isReimbursement: frame.isReimbursement,
+          splitMode: frame.splitMode,
+          notes: frame.notes,
+          recurrenceRule: frame.recurrenceRule,
         })
-        .catch(() => {
-          console.error(
-            'Failed to create recurring expense for expenseId: %s',
-            currentExpenseRecord?.id,
+
+        if (frame.paidFor.length > 0) {
+          await tx.insert(expensePaidForTable).values(
+            frame.paidFor.map((paidFor) => ({
+              expenseId: newExpenseId,
+              participantId: paidFor.participantId,
+              shares: paidFor.shares,
+            })),
           )
-          return false
+        }
+
+        if (frame.documentIds.length > 0) {
+          await tx
+            .update(expenseDocumentTable)
+            .set({ expenseId: newExpenseId })
+            .where(inArray(expenseDocumentTable.id, frame.documentIds))
+        }
+
+        await tx.insert(recurringExpenseLinkTable).values({
+          id: newRecurringExpenseLinkId,
+          groupId: frame.groupId,
+          currentFrameExpenseId: newExpenseId,
+          nextExpenseDate: newRecurringExpenseNextExpenseDate,
         })
+
+        await tx
+          .update(recurringExpenseLinkTable)
+          .set({ nextExpenseCreatedAt: utcDateFromLocal })
+          .where(
+            and(
+              eq(recurringExpenseLinkTable.id, currentRecurringExpenseLinkId),
+              isNull(recurringExpenseLinkTable.nextExpenseCreatedAt),
+            ),
+          )
+        return true
+      }).catch(() => {
+        console.error(
+          'Failed to create recurring expense for expenseId: %s',
+          currentExpenseRecord?.id,
+        )
+        return false
+      })
 
       if (!created) {
         break

@@ -41,9 +41,12 @@ next-env.d.ts
 postgres-data
 
 
-# custom
-sqlite-data
+# auto generated or secret things
+.env
 .idea
 wrangler.jsonc
 .open-next
-
+.wrangler
+.next
+cloudflare-env.d.ts
+dist

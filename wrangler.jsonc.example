@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "spliit-on-cloudflare",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-02-22",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "spliit-db",
+      "database_id": "<YOUR D1 DATABASE ID>",
+      "migrations_dir": "drizzle/migrations",
+      "preview_database_id": "DB"
+    }
+  ],
+  "minify": true
+}
