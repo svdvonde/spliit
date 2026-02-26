@@ -1,0 +1,781 @@
+{
+  "dialect": "sqlite",
+  "id": "1843d36e-ac6b-49a5-9873-66145255ba06",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "version": "7",
+  "ddl": [
+    {
+      "name": "Activity",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "Activity",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "Activity_pk",
+      "table": "Activity",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "groupId",
+      "table": "Activity",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%s', 'now'))",
+      "generated": null,
+      "name": "time",
+      "table": "Activity",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "activityType",
+      "table": "Activity",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participantId",
+      "table": "Activity",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expenseId",
+      "table": "Activity",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "table": "Activity",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "groupId"
+      ],
+      "tableTo": "Group",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "Activity_groupId_Group_id_fk",
+      "table": "Activity",
+      "entityType": "fks"
+    },
+    {
+      "name": "Category",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "Category",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "Category_pk",
+      "table": "Category",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "grouping",
+      "table": "Category",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "Category",
+      "entityType": "columns"
+    },
+    {
+      "name": "Expense",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "Expense_pk",
+      "table": "Expense",
+      "entityType": "pks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%s', 'now'))",
+      "generated": null,
+      "name": "expenseDate",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "categoryId",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "amount",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "originalAmount",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "originalCurrency",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "numeric",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "conversionRate",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "paidById",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "groupId",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "isReimbursement",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'EVENLY'",
+      "generated": null,
+      "name": "splitMode",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%s', 'now'))",
+      "generated": null,
+      "name": "createdAt",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "notes",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": "'NONE'",
+      "generated": null,
+      "name": "recurrenceRule",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "recurringExpenseLinkId",
+      "table": "Expense",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "categoryId"
+      ],
+      "tableTo": "Category",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "Expense_categoryId_Category_id_fk",
+      "table": "Expense",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "paidById"
+      ],
+      "tableTo": "Participant",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "Expense_paidById_Participant_id_fk",
+      "table": "Expense",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "groupId"
+      ],
+      "tableTo": "Group",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "Expense_groupId_Group_id_fk",
+      "table": "Expense",
+      "entityType": "fks"
+    },
+    {
+      "name": "ExpenseDocument",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "ExpenseDocument",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ExpenseDocument_pk",
+      "table": "ExpenseDocument",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "url",
+      "table": "ExpenseDocument",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "width",
+      "table": "ExpenseDocument",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "height",
+      "table": "ExpenseDocument",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expenseId",
+      "table": "ExpenseDocument",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "expenseId"
+      ],
+      "tableTo": "Expense",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "ExpenseDocument_expenseId_Expense_id_fk",
+      "table": "ExpenseDocument",
+      "entityType": "fks"
+    },
+    {
+      "name": "ExpensePaidFor",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expenseId",
+      "table": "ExpensePaidFor",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participantId",
+      "table": "ExpensePaidFor",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "shares",
+      "table": "ExpensePaidFor",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "expenseId",
+        "participantId"
+      ],
+      "nameExplicit": false,
+      "name": "ExpensePaidFor_expenseId_participantId_pk",
+      "table": "ExpensePaidFor",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "expenseId"
+      ],
+      "tableTo": "Expense",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "ExpensePaidFor_expenseId_Expense_id_fk",
+      "table": "ExpensePaidFor",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "participantId"
+      ],
+      "tableTo": "Participant",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "ExpensePaidFor_participantId_Participant_id_fk",
+      "table": "ExpensePaidFor",
+      "entityType": "fks"
+    },
+    {
+      "name": "Group",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "Group",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "Group_pk",
+      "table": "Group",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "Group",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "information",
+      "table": "Group",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'$'",
+      "generated": null,
+      "name": "currency",
+      "table": "Group",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "currencyCode",
+      "table": "Group",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%s', 'now'))",
+      "generated": null,
+      "name": "createdAt",
+      "table": "Group",
+      "entityType": "columns"
+    },
+    {
+      "name": "Participant",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "Participant",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "Participant_pk",
+      "table": "Participant",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "Participant",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "groupId",
+      "table": "Participant",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "groupId"
+      ],
+      "tableTo": "Group",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "Participant_groupId_Group_id_fk",
+      "table": "Participant",
+      "entityType": "fks"
+    },
+    {
+      "name": "RecurringExpenseLink",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "RecurringExpenseLink",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "RecurringExpenseLink_pk",
+      "table": "RecurringExpenseLink",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "groupId",
+      "table": "RecurringExpenseLink",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "currentFrameExpenseId",
+      "table": "RecurringExpenseLink",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "nextExpenseCreatedAt",
+      "table": "RecurringExpenseLink",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "nextExpenseDate",
+      "table": "RecurringExpenseLink",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "groupId",
+          "isExpression": false
+        },
+        {
+          "value": "nextExpenseCreatedAt",
+          "isExpression": false
+        },
+        {
+          "value": "nextExpenseDate",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "RecurringExpenseLink_groupId_nextExpenseCreatedAt_nextExpenseDate_idx",
+      "table": "RecurringExpenseLink",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "groupId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "RecurringExpenseLink_groupId_idx",
+      "table": "RecurringExpenseLink",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "currentFrameExpenseId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "RecurringExpenseLink_currentFrameExpenseId_key",
+      "table": "RecurringExpenseLink",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "currentFrameExpenseId"
+      ],
+      "tableTo": "Expense",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "RecurringExpenseLink_currentFrameExpenseId_Expense_id_fk",
+      "table": "RecurringExpenseLink",
+      "entityType": "fks"
+    }
+  ],
+  "renames": []
+}

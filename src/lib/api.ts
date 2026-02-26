@@ -1,62 +1,52 @@
 import { getDb } from '@/db/db'
-import {
-  activity as activityTable,
-  category as categoryTable,
-  expenseDocument as expenseDocumentTable,
-  expensePaidFor as expensePaidForTable,
-  expense as expenseTable,
-  group as groupTable,
-  participant as participantTable,
-  recurringExpenseLink as recurringExpenseLinkTable,
-} from '@/db/schema'
-import {
-  ActivityType,
-  RecurrenceRule,
-  type RecurrenceRule as RecurrenceRuleType,
-  type SplitMode,
-} from '@/db/types'
-import { ExpenseFormValues, GroupFormValues } from '@/lib/schemas'
-import { and, count, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm'
+import * as schema from '@/db/schema'
+import { ActivityType,RecurrenceRule } from '@/db/types'
+import { ExpenseFormValues,GroupFormValues } from '@/lib/schemas'
+import { and,count,eq,inArray,isNull } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+
+/**
+ * This file frequently batches multiple statements together.
+ * Since many statements depend on a condition
+ * (i.e., run the statement only if a condition holds),
+ * we need to creatively build an array of statements that, to the best of my
+ * knowledge, cannot include 'undefined' values. The resulting array can be
+ * given to a db.batch statement to batch them all together in a 'transaction'
+ *
+ * JavaScript (conditional) spread syntax, although awkward, can be used for this:
+ *
+ * console.log(["statement1", ...[], ...["statement2"]]);
+ * ==> [ "statement1", "statement2" ]
+ */
 
 export function randomId() {
   return nanoid()
-}
-
-const runTransaction = async <T>(
-  db: ReturnType<typeof getDb>,
-  callback: (tx: ReturnType<typeof getDb>) => Promise<T>,
-): Promise<T> => {
-  return callback(db)
 }
 
 export async function createGroup(groupFormValues: GroupFormValues) {
   const db = getDb()
   const groupId = randomId()
 
-  await runTransaction(db, async (tx) => {
-    await tx.insert(groupTable).values({
+  const participantRows = groupFormValues.participants.map((participant) => ({
+    id: randomId(),
+    groupId,
+    name: participant.name,
+  }))
+
+  await db.batch([
+    db.insert(schema.group).values({
       id: groupId,
       name: groupFormValues.name,
       information: groupFormValues.information ?? null,
       currency: groupFormValues.currency,
       currencyCode: groupFormValues.currencyCode || null,
-    })
+    }),
+    ...(groupFormValues.participants.length > 0
+      ? [db.insert(schema.participant).values(participantRows)]
+      : []),
+  ]);
 
-    if (groupFormValues.participants.length > 0) {
-      await tx.insert(participantTable).values(
-        groupFormValues.participants.map((participant) => ({
-          id: randomId(),
-          groupId,
-          name: participant.name,
-        })),
-      )
-    }
-  })
-
-  const group = await getGroup(groupId)
-  if (!group) throw new Error('Failed to create group')
-  return group
+  return getGroup(groupId);
 }
 
 export async function createExpense(
@@ -67,81 +57,93 @@ export async function createExpense(
   const db = getDb()
 
   const group = await getGroup(groupId)
-  if (!group) throw new Error(`Invalid group ID: ${groupId}`)
+  if (!group) {
+    throw new Error(`Invalid group: ${groupId}`)
+  }
 
   for (const participant of [
     expenseFormValues.paidBy,
     ...expenseFormValues.paidFor.map((p) => p.participant),
   ]) {
     if (!group.participants.some((p) => p.id === participant)) {
-      throw new Error(`Invalid participant ID: ${participant}`)
+      throw new Error(`Invalid participant: ${participant}`)
     }
   }
 
   const expenseId = randomId()
-  const categoryId = expenseFormValues.category
 
-  await logActivity(groupId, ActivityType.CREATE_EXPENSE, {
-    participantId,
-    expenseId,
-    data: expenseFormValues.title,
-  })
+  const logActivityStatement = makeLogActivityStatement(
+    groupId,
+    ActivityType.CREATE_EXPENSE,
+    {
+      participantId,
+      expenseId,
+      data: expenseFormValues.title,
+    },
+  )
 
   const isCreateRecurrence =
     expenseFormValues.recurrenceRule !== RecurrenceRule.NONE
 
-  await runTransaction(db, async (tx) => {
-    await tx.insert(expenseTable).values({
+  await db.batch([
+    logActivityStatement,
+    db.insert(schema.expense).values({
       id: expenseId,
       groupId,
       expenseDate: expenseFormValues.expenseDate,
       categoryId: expenseFormValues.category,
       amount: expenseFormValues.amount,
-      originalAmount: expenseFormValues.originalAmount ?? null,
-      originalCurrency: expenseFormValues.originalCurrency || null,
-      conversionRate: expenseFormValues.conversionRate?.toString() ?? null,
+      originalAmount: expenseFormValues.originalAmount,
+      originalCurrency: expenseFormValues.originalCurrency,
+      conversionRate: expenseFormValues.conversionRate,
       title: expenseFormValues.title,
       paidById: expenseFormValues.paidBy,
       splitMode: expenseFormValues.splitMode,
       recurrenceRule: expenseFormValues.recurrenceRule,
       isReimbursement: expenseFormValues.isReimbursement,
-      notes: expenseFormValues.notes ?? null,
-    })
+      notes: expenseFormValues.notes,
+    }),
 
-    if (expenseFormValues.paidFor.length > 0) {
-      await tx.insert(expensePaidForTable).values(
-        expenseFormValues.paidFor.map((paidFor) => ({
-          expenseId,
-          participantId: paidFor.participant,
-          shares: paidFor.shares,
-        })),
-      )
-    }
+    ...(expenseFormValues.paidFor.length > 0
+      ? [
+          db.insert(schema.expensePaidFor).values(
+            expenseFormValues.paidFor.map((paidFor) => ({
+              expenseId,
+              participantId: paidFor.participant,
+              shares: paidFor.shares,
+            })),
+          ),
+        ]
+      : []),
 
-    if (expenseFormValues.documents.length > 0) {
-      await tx.insert(expenseDocumentTable).values(
-        expenseFormValues.documents.map((document) => ({
-          id: document.id,
-          expenseId,
-          url: document.url,
-          width: document.width,
-          height: document.height,
-        })),
-      )
-    }
+    ...(expenseFormValues.documents.length > 0
+      ? [
+          db.insert(schema.expenseDocument).values(
+            expenseFormValues.documents.map((document) => ({
+              id: document.id,
+              expenseId,
+              url: document.url,
+              width: document.width,
+              height: document.height,
+            })),
+          ),
+        ]
+      : []),
 
-    if (isCreateRecurrence) {
-      await tx.insert(recurringExpenseLinkTable).values({
-        id: randomId(),
-        groupId,
-        currentFrameExpenseId: expenseId,
-        nextExpenseDate: calculateNextDate(
-          expenseFormValues.recurrenceRule as RecurrenceRule,
-          expenseFormValues.expenseDate,
-        ),
-      })
-    }
-  })
+    ...(isCreateRecurrence
+      ? [
+          db.insert(schema.recurringExpenseLink).values({
+            id: randomId(),
+            groupId,
+            currentFrameExpenseId: expenseId,
+            nextExpenseDate: calculateNextDate(
+              expenseFormValues.recurrenceRule as RecurrenceRule,
+              expenseFormValues.expenseDate,
+            ),
+          }),
+        ]
+      : []),
+  ])
 
   return { id: expenseId }
 }
@@ -154,17 +156,25 @@ export async function deleteExpense(
   const db = getDb()
 
   const existingExpense = await getExpense(groupId, expenseId)
-  await logActivity(groupId, ActivityType.DELETE_EXPENSE, {
-    participantId,
-    expenseId,
-    data: existingExpense?.title,
-  })
+  const logActivityStatement = makeLogActivityStatement(
+    groupId,
+    ActivityType.DELETE_EXPENSE,
+    {
+      participantId,
+      expenseId,
+      data: existingExpense?.title,
+    },
+  )
 
-  await db
-    .delete(expenseTable)
+  const deleteStatement = db
+    .delete(schema.expense)
     .where(
-      and(eq(expenseTable.id, expenseId), eq(expenseTable.groupId, groupId)),
+      and(
+        eq(schema.expense.id, expenseId),
+        eq(schema.expense.groupId, groupId),
+      ),
     )
+  await db.batch([logActivityStatement, deleteStatement])
 }
 
 export async function getGroupExpensesParticipants(groupId: string) {
@@ -180,34 +190,47 @@ export async function getGroupExpensesParticipants(groupId: string) {
 }
 
 export async function getGroups(groupIds: string[]) {
-  if (groupIds.length === 0) return []
-
   const db = getDb()
-  const groups = await db
-    .select()
-    .from(groupTable)
-    .where(inArray(groupTable.id, groupIds))
 
-  const participantCounts = await db
-    .select({
-      groupId: participantTable.groupId,
-      participantCount: count(),
-    })
-    .from(participantTable)
-    .where(inArray(participantTable.groupId, groupIds))
-    .groupBy(participantTable.groupId)
+  const results = await db.batch([
+    db.query.group.findMany({
+      where: {
+        id: { in: groupIds },
+      },
+    }),
+    db
+      .select({
+        groupId: schema.group.id,
+        participantCount: count(schema.participant.id),
+      })
+      .from(schema.group)
+      .leftJoin(
+        schema.participant,
+        eq(schema.participant.groupId, schema.group.id),
+      )
+      .groupBy(schema.group.id),
+  ])
 
-  const countByGroupId = new Map(
-    participantCounts.map((row) => [row.groupId, row.participantCount]),
+  const groups = results[0]
+  const counts = new Map(
+    results[1].map((count) => [count.groupId, count.participantCount]),
   )
 
-  return groups.map((group) => ({
-    ...group,
-    createdAt: group.createdAt,
-    _count: {
-      participants: countByGroupId.get(group.id) ?? 0,
-    },
-  }))
+  return groups.map((group) => {
+    const participantCount = counts.get(group.id)
+    if (participantCount === undefined) {
+      throw new Error(
+        `Count not count the number of participants for group ${group.id}`,
+      );
+    }
+    return {
+      ...group,
+      _count: {
+        participants: participantCount,
+      },
+      createdAt: group.createdAt.toISOString(),
+    }
+  })
 }
 
 export async function updateExpense(
@@ -219,10 +242,14 @@ export async function updateExpense(
   const db = getDb()
 
   const group = await getGroup(groupId)
-  if (!group) throw new Error(`Invalid group ID: ${groupId}`)
+  if (!group) {
+    throw new Error(`Invalid group ID: ${groupId}`)
+  }
 
   const existingExpense = await getExpense(groupId, expenseId)
-  if (!existingExpense) throw new Error(`Invalid expense ID: ${expenseId}`)
+  if (!existingExpense) {
+    throw new Error(`Invalid expense ID: ${expenseId}`)
+  }
 
   for (const participant of [
     expenseFormValues.paidBy,
@@ -233,11 +260,15 @@ export async function updateExpense(
     }
   }
 
-  await logActivity(groupId, ActivityType.UPDATE_EXPENSE, {
-    participantId,
-    expenseId,
-    data: expenseFormValues.title,
-  })
+  const logActivityStatement = makeLogActivityStatement(
+    groupId,
+    ActivityType.UPDATE_EXPENSE,
+    {
+      participantId,
+      expenseId,
+      data: expenseFormValues.title,
+    },
+  )
 
   const isDeleteRecurrenceExpenseLink =
     existingExpense.recurrenceRule !== RecurrenceRule.NONE &&
@@ -254,34 +285,61 @@ export async function updateExpense(
     existingExpense.recurringExpenseLink === null
 
   const updatedRecurrenceExpenseLinkNextExpenseDate = calculateNextDate(
-    expenseFormValues.recurrenceRule as RecurrenceRule,
+    expenseFormValues.recurrenceRule,
     existingExpense.expenseDate,
   )
 
-  const categoryId = expenseFormValues.category
+  const newRecurringExpenseLink = createPayloadForNewRecurringExpenseLink(
+    expenseFormValues.recurrenceRule,
+    expenseFormValues.expenseDate,
+    groupId,
+    expenseId,
+  )
 
-  await runTransaction(db, async (tx) => {
-    await tx
-      .update(expenseTable)
+  // Collect the participants that are present in the existing expense,
+  // but are no longer included in the form
+  const participantIdsFromForm = expenseFormValues.paidFor.map(
+    (paidFor) => paidFor.participant,
+  )
+  const participantIdsToDelete = existingExpense.paidFor
+    .filter(
+      (paidFor) => !participantIdsFromForm.includes(paidFor.participantId),
+    )
+    .map((paidFor) => paidFor.participantId)
+
+  const currentDocumentIds = existingExpense.documents.map(
+    (document) => document.id,
+  )
+  const nextDocumentIds = expenseFormValues.documents.map(
+    (document) => document.id,
+  )
+  const documentIdsToDelete = currentDocumentIds.filter(
+    (id) => !nextDocumentIds.includes(id),
+  )
+
+  db.batch([
+    logActivityStatement,
+    db
+      .update(schema.expense)
       .set({
         expenseDate: expenseFormValues.expenseDate,
         amount: expenseFormValues.amount,
-        originalAmount: expenseFormValues.originalAmount ?? null,
-        originalCurrency: expenseFormValues.originalCurrency || null,
-        conversionRate: expenseFormValues.conversionRate?.toString() ?? null,
+        originalAmount: expenseFormValues.originalAmount,
+        originalCurrency: expenseFormValues.originalCurrency,
+        conversionRate: expenseFormValues.conversionRate,
         title: expenseFormValues.title,
-        categoryId,
+        categoryId: expenseFormValues.category,
         paidById: expenseFormValues.paidBy,
         splitMode: expenseFormValues.splitMode,
         recurrenceRule: expenseFormValues.recurrenceRule,
         isReimbursement: expenseFormValues.isReimbursement,
-        notes: expenseFormValues.notes ?? null,
+        notes: expenseFormValues.notes,
       })
-      .where(eq(expenseTable.id, expenseId))
+      .where(eq(schema.expense.id, expenseId)),
 
-    for (const paidFor of expenseFormValues.paidFor) {
-      await tx
-        .insert(expensePaidForTable)
+    ...expenseFormValues.paidFor.map((paidFor) => {
+      return db
+        .insert(schema.expensePaidFor)
         .values({
           expenseId,
           participantId: paidFor.participant,
@@ -289,75 +347,58 @@ export async function updateExpense(
         })
         .onConflictDoUpdate({
           target: [
-            expensePaidForTable.expenseId,
-            expensePaidForTable.participantId,
+            schema.expensePaidFor.expenseId,
+            schema.expensePaidFor.participantId,
           ],
           set: {
             shares: paidFor.shares,
           },
         })
-    }
+    }),
 
-    const participantIdsFromForm = expenseFormValues.paidFor.map(
-      (paidFor) => paidFor.participant,
-    )
-    const participantIdsToDelete = existingExpense.paidFor
-      .filter(
-        (paidFor) => !participantIdsFromForm.includes(paidFor.participantId),
-      )
-      .map((paidFor) => paidFor.participantId)
-
-    if (participantIdsToDelete.length > 0) {
-      await tx
-        .delete(expensePaidForTable)
-        .where(
-          and(
-            eq(expensePaidForTable.expenseId, expenseId),
-            inArray(expensePaidForTable.participantId, participantIdsToDelete),
-          ),
-        )
-    }
-
-    if (isCreateRecurrenceExpenseLink) {
-      await tx.insert(recurringExpenseLinkTable).values({
-        id: randomId(),
-        groupId,
-        currentFrameExpenseId: expenseId,
-        nextExpenseDate: calculateNextDate(
-          expenseFormValues.recurrenceRule as RecurrenceRule,
-          expenseFormValues.expenseDate,
+    db
+      .delete(schema.expensePaidFor)
+      .where(
+        and(
+          eq(schema.expensePaidFor.expenseId, expenseId),
+          inArray(schema.expensePaidFor.participantId, participantIdsToDelete),
         ),
-      })
-    }
+      ),
 
-    if (isUpdateRecurrenceExpenseLink && existingExpense.recurringExpenseLink) {
-      await tx
-        .update(recurringExpenseLinkTable)
-        .set({
-          nextExpenseDate: updatedRecurrenceExpenseLinkNextExpenseDate,
-        })
-        .where(
-          eq(
-            recurringExpenseLinkTable.id,
-            existingExpense.recurringExpenseLink.id,
-          ),
-        )
-    }
+    ...(isCreateRecurrenceExpenseLink
+      ? [db.insert(schema.recurringExpenseLink).values(newRecurringExpenseLink)]
+      : []),
+    ...(isUpdateRecurrenceExpenseLink
+      ? [
+          db
+            .update(schema.recurringExpenseLink)
+            .set({
+              nextExpenseDate: updatedRecurrenceExpenseLinkNextExpenseDate,
+            })
+            .where(
+              eq(
+                schema.recurringExpenseLink.id,
+                existingExpense.recurringExpenseLink!.id,
+              ),
+            ),
+        ]
+      : []),
+    ...(isDeleteRecurrenceExpenseLink
+      ? [
+          db
+            .delete(schema.recurringExpenseLink)
+            .where(
+              eq(
+                schema.recurringExpenseLink.id,
+                existingExpense.recurringExpenseLink!.id,
+              ),
+            ),
+        ]
+      : []),
 
-    if (isDeleteRecurrenceExpenseLink && existingExpense.recurringExpenseLink) {
-      await tx
-        .delete(recurringExpenseLinkTable)
-        .where(
-          eq(
-            recurringExpenseLinkTable.id,
-            existingExpense.recurringExpenseLink.id,
-          ),
-        )
-    }
-
-    for (const document of expenseFormValues.documents) {
-      await tx
-        .insert(expenseDocumentTable)
+    ...expenseFormValues.documents.map((document) => {
+      return db
+        .insert(schema.expenseDocument)
         .values({
           id: document.id,
           expenseId,
@@ -366,7 +407,7 @@ export async function updateExpense(
           height: document.height,
         })
         .onConflictDoUpdate({
-          target: expenseDocumentTable.id,
+          target: schema.expenseDocument.id,
           set: {
             expenseId,
             url: document.url,
@@ -374,32 +415,53 @@ export async function updateExpense(
             height: document.height,
           },
         })
-    }
+    }),
 
-    const currentDocumentIds = existingExpense.documents.map(
-      (document) => document.id,
-    )
-    const nextDocumentIds = expenseFormValues.documents.map(
-      (document) => document.id,
-    )
-    const documentIdsToDelete = currentDocumentIds.filter(
-      (id) => !nextDocumentIds.includes(id),
-    )
-
-    if (documentIdsToDelete.length > 0) {
-      await tx
-        .delete(expenseDocumentTable)
-        .where(
-          and(
-            eq(expenseDocumentTable.expenseId, expenseId),
-            inArray(expenseDocumentTable.id, documentIdsToDelete),
-          ),
-        )
-    }
-  })
+    db
+      .delete(schema.expenseDocument)
+      .where(
+        and(
+          eq(schema.expenseDocument.expenseId, expenseId),
+          inArray(schema.expenseDocument.id, documentIdsToDelete),
+        ),
+      ),
+  ])
 
   return { id: expenseId }
 }
+
+/*
+  return prisma.group.update({
+    where: { id: groupId },
+    data: {
+      name: groupFormValues.name,
+      information: groupFormValues.information,
+      currency: groupFormValues.currency,
+      currencyCode: groupFormValues.currencyCode,
+      participants: {
+        deleteMany: existingGroup.participants.filter(
+          (p) => !groupFormValues.participants.some((p2) => p2.id === p.id),
+        ),
+        updateMany: groupFormValues.participants
+          .filter((participant) => participant.id !== undefined)
+          .map((participant) => ({
+            where: { id: participant.id },
+            data: {
+              name: participant.name,
+            },
+          })),
+        createMany: {
+          data: groupFormValues.participants
+            .filter((participant) => participant.id === undefined)
+            .map((participant) => ({
+              id: randomId(),
+              name: participant.name,
+            })),
+        },
+      },
+    },
+  })
+ */
 
 export async function updateGroup(
   groupId: string,
@@ -411,100 +473,127 @@ export async function updateGroup(
   const existingGroup = await getGroup(groupId)
   if (!existingGroup) throw new Error('Invalid group ID')
 
-  await logActivity(groupId, ActivityType.UPDATE_GROUP, { participantId })
+  const existingParticipantIds = existingGroup.participants.map(
+    (participant) => participant.id,
+  )
+  const nextParticipantsWithIds = groupFormValues.participants.filter(
+    (participant): participant is { id: string; name: string } =>
+      participant.id !== undefined,
+  )
+  const nextParticipantIds = nextParticipantsWithIds.map(
+    (participant) => participant.id,
+  )
+  const participantIdsToDelete = existingParticipantIds.filter(
+    (id) => !nextParticipantIds.includes(id),
+  )
 
-  await runTransaction(db, async (tx) => {
-    await tx
-      .update(groupTable)
+  const newParticipants = groupFormValues.participants
+    .filter((participant) => participant.id === undefined)
+    .map((participant) => ({
+      id: randomId(),
+      groupId,
+      name: participant.name,
+    }))
+
+  const logActivityStatement = makeLogActivityStatement(
+    groupId,
+    ActivityType.UPDATE_GROUP,
+    {
+      participantId,
+    },
+  )
+
+  return await db.batch([
+    logActivityStatement,
+    db
+      .update(schema.group)
       .set({
         name: groupFormValues.name,
-        information: groupFormValues.information ?? null,
+        information: groupFormValues.information,
         currency: groupFormValues.currency,
-        currencyCode: groupFormValues.currencyCode || null,
+        currencyCode: groupFormValues.currencyCode,
       })
-      .where(eq(groupTable.id, groupId))
+      .where(eq(schema.group.id, groupId)),
 
-    const existingParticipantIds = existingGroup.participants.map(
-      (participant) => participant.id,
-    )
-    const nextParticipantsWithIds = groupFormValues.participants.filter(
-      (participant): participant is { id: string; name: string } =>
-        participant.id !== undefined,
-    )
+    db
+      .delete(schema.participant)
+      .where(
+        and(
+          eq(schema.participant.groupId, groupId),
+          inArray(schema.participant.id, participantIdsToDelete),
+        ),
+      ),
 
-    const nextParticipantIds = nextParticipantsWithIds.map(
-      (participant) => participant.id,
-    )
-
-    const participantIdsToDelete = existingParticipantIds.filter(
-      (id) => !nextParticipantIds.includes(id),
-    )
-
-    if (participantIdsToDelete.length > 0) {
-      await tx
-        .delete(participantTable)
-        .where(
-          and(
-            eq(participantTable.groupId, groupId),
-            inArray(participantTable.id, participantIdsToDelete),
-          ),
-        )
-    }
-
-    for (const participant of nextParticipantsWithIds) {
-      await tx
-        .update(participantTable)
+    ...nextParticipantsWithIds.map((participant) => {
+      return db
+        .update(schema.participant)
         .set({ name: participant.name })
         .where(
           and(
-            eq(participantTable.groupId, groupId),
-            eq(participantTable.id, participant.id),
+            eq(schema.participant.groupId, groupId),
+            eq(schema.participant.id, participant.id),
           ),
         )
-    }
+    }),
+    db.insert(schema.participant).values(newParticipants),
+  ])
+}
 
-    const newParticipants = groupFormValues.participants
-      .filter((participant) => participant.id === undefined)
-      .map((participant) => ({
-        id: randomId(),
-        groupId,
-        name: participant.name,
-      }))
-
-    if (newParticipants.length > 0) {
-      await tx.insert(participantTable).values(newParticipants)
-    }
+/*
+export async function getGroup(groupId: string) {
+  return prisma.group.findUnique({
+    where: { id: groupId },
+    include: { participants: true },
   })
 }
+ */
 
 export async function getGroup(groupId: string) {
   const db = getDb()
+  const group = await db.query.group.findFirst({
+    where: {
+      id: groupId,
+    },
+    with: {
+      participants: true,
+    },
+  });
 
-  const rows = await db
-    .select()
-    .from(groupTable)
-    .where(eq(groupTable.id, groupId))
-    .limit(1)
-  const group = rows[0]
-  if (!group) return null
+  if (group === undefined) {
+    throw new Error(`Group not found: ${groupId}`);
+  }
 
-  const participants = await db
-    .select()
-    .from(participantTable)
-    .where(eq(participantTable.groupId, groupId))
+  return group;
+}
+
+/*
+export async function getGroup(groupId: string) {
+  const db = getDb()
+
+  const result = await db.batch([
+    db.select().from(schema.group).where(eq(schema.group.id, groupId)).limit(1),
+    db
+      .select()
+      .from(schema.participant)
+      .where(eq(schema.participant.groupId, groupId)),
+  ])
+
+  const groups = result[0]
+  const participants = result[1]
+
+  if (groups.length !== 1) {
+    throw new Error(`Group does not exist`)
+  }
 
   return {
-    ...group,
+    ...groups[0],
     participants,
   }
-}
+}*/
 
 export async function getCategories() {
   const db = getDb()
-  return db
-    .select()
-    .from(categoryTable)
-    .orderBy(categoryTable.grouping, categoryTable.name)
+  return db.query.category.findMany()
 }
 
 export async function getGroupExpenses(
@@ -515,222 +604,109 @@ export async function getGroupExpenses(
 
   await createRecurringExpenses()
 
-  const filter = options?.filter?.trim().toLowerCase()
-  const whereClause = filter
-    ? and(
-        eq(expenseTable.groupId, groupId),
-        sql`lower(${expenseTable.title}) like ${`%${filter}%`}`,
-      )
-    : eq(expenseTable.groupId, groupId)
-
-  const expenses = await db
-    .select()
-    .from(expenseTable)
-    .where(whereClause)
-    .orderBy(desc(expenseTable.expenseDate), desc(expenseTable.createdAt))
-    .offset(options?.offset ?? 0)
-    .limit(options?.length ?? 1000)
-
-  if (expenses.length === 0) return []
+  const expenses = await db.query.expense.findMany({
+    offset: options && options.offset,
+    limit: options && options.length,
+    with: {
+      paidBy: true,
+      category: true,
+      documents: true,
+      paidFor: {
+        with: {
+          participant: true,
+        },
+      },
+    },
+    where: {
+      groupId,
+      title: options?.filter ? { ilike: `%${options.filter}%` } : undefined,
+    },
+    orderBy: {
+      expenseDate: 'desc',
+      createdAt: 'desc',
+    },
+  })
 
   const expenseIds = expenses.map((expense) => expense.id)
 
-  const categories = await db
-    .select()
-    .from(categoryTable)
-    .where(
-      inArray(
-        categoryTable.id,
-        Array.from(new Set(expenses.map((expense) => expense.categoryId))),
-      ),
-    )
-
-  const participants = await db
-    .select()
-    .from(participantTable)
-    .where(
-      inArray(
-        participantTable.id,
-        Array.from(new Set(expenses.map((expense) => expense.paidById))),
-      ),
-    )
-
-  const paidFors = await db
+  const documentsPerExpense = await db
     .select({
-      expenseId: expensePaidForTable.expenseId,
-      participantId: expensePaidForTable.participantId,
-      shares: expensePaidForTable.shares,
-      participantName: participantTable.name,
+      expenseId: schema.expense.id,
+      expenseDocumentCount: count(schema.expenseDocument.id),
     })
-    .from(expensePaidForTable)
-    .innerJoin(
-      participantTable,
-      eq(participantTable.id, expensePaidForTable.participantId),
+    .from(schema.expense)
+    .where(inArray(schema.expense.id, expenseIds))
+    .leftJoin(
+      schema.expenseDocument,
+      eq(schema.expenseDocument.expenseId, schema.expense.id),
     )
-    .where(inArray(expensePaidForTable.expenseId, expenseIds))
+    .groupBy(schema.expense.id)
 
-  const documentCounts = await db
-    .select({
-      expenseId: expenseDocumentTable.expenseId,
-      documentCount: count(),
-    })
-    .from(expenseDocumentTable)
-    .where(inArray(expenseDocumentTable.expenseId, expenseIds))
-    .groupBy(expenseDocumentTable.expenseId)
+  const documentsPerExpenseMap = new Map(
+    documentsPerExpense.map((obj) => [obj.expenseId, obj.expenseDocumentCount]),
+  )
 
-  const categoriesById = new Map(
-    categories.map((category) => [category.id, category]),
-  )
-  const participantsById = new Map(
-    participants.map((participant) => [participant.id, participant]),
-  )
-  const paidForByExpenseId = new Map<string, Array<(typeof paidFors)[number]>>()
-  const documentCountByExpenseId = new Map(
-    documentCounts
-      .filter(
-        (row): row is { expenseId: string; documentCount: number } =>
-          row.expenseId !== null,
+  return expenses.map((expense) => {
+    const documentCount = documentsPerExpenseMap.get(expense.id)
+    if (documentCount === undefined) {
+      throw new Error(
+        `Could not count the number of documents for expense ${expense.id}`,
       )
-      .map((row) => [row.expenseId, row.documentCount]),
-  )
-
-  for (const paidFor of paidFors) {
-    const list = paidForByExpenseId.get(paidFor.expenseId) ?? []
-    list.push(paidFor)
-    paidForByExpenseId.set(paidFor.expenseId, list)
-  }
-
-  return expenses.map((expense) => ({
-    id: expense.id,
-    title: expense.title,
-    amount: expense.amount,
-    originalAmount: expense.originalAmount,
-    originalCurrency: expense.originalCurrency,
-    conversionRate: expense.conversionRate,
-    paidById: expense.paidById,
-    category: categoriesById.get(expense.categoryId) ?? null,
-    createdAt: expense.createdAt,
-    expenseDate: expense.expenseDate,
-    isReimbursement: expense.isReimbursement,
-    paidBy: (() => {
-      const participant = participantsById.get(expense.paidById)
-      return {
-        id: participant?.id ?? expense.paidById,
-        name: participant?.name ?? 'Unknown',
-      }
-    })(),
-    paidFor: (paidForByExpenseId.get(expense.id) ?? []).map((paidFor) => ({
-      shares: paidFor.shares,
-      participant: {
-        id: paidFor.participantId,
-        name: paidFor.participantName,
+    }
+    return {
+      ...expense,
+      _count: {
+        documents: documentCount,
       },
-    })),
-    splitMode: expense.splitMode as SplitMode,
-    recurrenceRule: (expense.recurrenceRule ??
-      RecurrenceRule.NONE) as RecurrenceRuleType,
-    _count: {
-      documents: documentCountByExpenseId.get(expense.id) ?? 0,
-    },
-  }))
+    }
+  })
 }
 
 export async function getGroupExpenseCount(groupId: string) {
   const db = getDb()
-  const result = await db
-    .select({ count: count() })
-    .from(expenseTable)
-    .where(eq(expenseTable.groupId, groupId))
-
-  return result[0]?.count ?? 0
+  return db.$count(schema.expense, eq(schema.expense.groupId, groupId))
 }
 
 export async function getExpense(groupId: string, expenseId: string) {
   const db = getDb()
-
-  const expenseRows = await db
-    .select()
-    .from(expenseTable)
-    .where(
-      and(eq(expenseTable.id, expenseId), eq(expenseTable.groupId, groupId)),
-    )
-    .limit(1)
-
-  const expense = expenseRows[0]
-  if (!expense) return null
-
-  const paidByRows = await db
-    .select()
-    .from(participantTable)
-    .where(eq(participantTable.id, expense.paidById))
-    .limit(1)
-
-  const paidFor = await db
-    .select()
-    .from(expensePaidForTable)
-    .where(eq(expensePaidForTable.expenseId, expenseId))
-
-  const categoryRows = await db
-    .select()
-    .from(categoryTable)
-    .where(eq(categoryTable.id, expense.categoryId))
-    .limit(1)
-
-  const documents = await db
-    .select()
-    .from(expenseDocumentTable)
-    .where(eq(expenseDocumentTable.expenseId, expenseId))
-
-  const recurringLinkRows = await db
-    .select()
-    .from(recurringExpenseLinkTable)
-    .where(eq(recurringExpenseLinkTable.currentFrameExpenseId, expenseId))
-    .limit(1)
-
-  const recurringLink = recurringLinkRows[0]
-
-  return {
-    ...expense,
-    createdAt: expense.createdAt,
-    expenseDate: expense.expenseDate,
-    isReimbursement: expense.isReimbursement,
-    splitMode: expense.splitMode as SplitMode,
-    recurrenceRule: (expense.recurrenceRule ??
-      RecurrenceRule.NONE) as RecurrenceRuleType,
-    paidBy: paidByRows[0] ?? null,
-    paidFor,
-    category: categoryRows[0] ?? null,
-    documents,
-    recurringExpenseLink: recurringLink
-      ? {
-          ...recurringLink,
-          nextExpenseDate: recurringLink.nextExpenseDate,
-          nextExpenseCreatedAt: recurringLink.nextExpenseCreatedAt
-            ? recurringLink.nextExpenseCreatedAt
-            : null,
-        }
-      : null,
-  }
+  return db.query.expense.findFirst({
+    where: {
+      id: expenseId,
+    },
+    with: {
+      paidBy: true,
+      paidFor: true,
+      category: true,
+      documents: true,
+      recurringExpenseLink: true,
+    },
+  })
 }
 
-/*
 export async function getActivities(
   groupId: string,
   options?: { offset?: number; length?: number },
 ) {
-  const activities = await prisma.activity.findMany({
-    where: { groupId },
-    orderBy: [{ time: 'desc' }],
-    skip: options?.offset,
-    take: options?.length,
+  const db = getDb()
+
+  const activities = await db.query.activity.findMany({
+    where: {
+      groupId: groupId,
+    },
+    offset: options?.offset,
+    limit: options?.length,
+    orderBy: {
+      time: 'desc',
+    },
   })
 
   const expenseIds = activities
     .map((activity) => activity.expenseId)
-    .filter(Boolean)
-  const expenses = await prisma.expense.findMany({
+    .filter((expenseId): expenseId is string => expenseId !== null)
+
+  const expenses = await db.query.expense.findMany({
     where: {
-      groupId,
+      groupId: groupId,
       id: { in: expenseIds },
     },
   })
@@ -743,58 +719,15 @@ export async function getActivities(
         : undefined,
   }))
 }
-*/
 
-export async function getActivities(
-  groupId: string,
-  options?: { offset?: number; length?: number },
-) {
-  const db = getDb()
-
-  const activities = await db
-    .select()
-    .from(activityTable)
-    .where(eq(activityTable.groupId, groupId))
-    .orderBy(desc(activityTable.time))
-    .offset(options?.offset ?? 0)
-    .limit(options?.length ?? Number.POSITIVE_INFINITY)
-
-  const expenseIds = activities
-    .map((activity) => activity.expenseId)
-    .filter((expenseId): expenseId is string => expenseId !== null)
-
-  const expenses = expenseIds.length
-    ? await db
-        .select()
-        .from(expenseTable)
-        .where(
-          and(
-            eq(expenseTable.groupId, groupId),
-            inArray(expenseTable.id, expenseIds),
-          ),
-        )
-    : []
-
-  const expensesById = new Map(expenses.map((expense) => [expense.id, expense]))
-
-  return activities.map((activity) => ({
-    ...activity,
-    time: activity.time,
-    expense:
-      activity.expenseId !== null
-        ? expensesById.get(activity.expenseId)
-        : undefined,
-  }))
-}
-
-export async function logActivity(
+export function makeLogActivityStatement(
   groupId: string,
   activityType: ActivityType,
   extra?: { participantId?: string; expenseId?: string; data?: string },
 ) {
   const db = getDb()
   const id = randomId()
-  await db.insert(activityTable).values({
+  return db.insert(schema.activity).values({
     id,
     groupId,
     activityType,
@@ -802,45 +735,12 @@ export async function logActivity(
     expenseId: extra?.expenseId ?? null,
     data: extra?.data ?? null,
   })
-
-  return { id }
-}
-
-async function getRecurringExpenseFrame(expenseId: string) {
-  const db = getDb()
-
-  const expenseRows = await db
-    .select()
-    .from(expenseTable)
-    .where(eq(expenseTable.id, expenseId))
-    .limit(1)
-
-  const expense = expenseRows[0]
-  if (!expense) return null
-
-  const paidFor = await db
-    .select()
-    .from(expensePaidForTable)
-    .where(eq(expensePaidForTable.expenseId, expenseId))
-
-  const documents = await db
-    .select({ id: expenseDocumentTable.id })
-    .from(expenseDocumentTable)
-    .where(eq(expenseDocumentTable.expenseId, expenseId))
-
-  return {
-    ...expense,
-    expenseDate: expense.expenseDate,
-    createdAt: expense.createdAt,
-    paidFor,
-    documentIds: documents.map((document) => document.id),
-  }
 }
 
 async function createRecurringExpenses() {
   const db = getDb()
 
-  const localDate = new Date()
+  const localDate = new Date() // Current local date
   const utcDateFromLocal = new Date(
     Date.UTC(
       localDate.getUTCFullYear(),
@@ -852,73 +752,112 @@ async function createRecurringExpenses() {
     ),
   )
 
-  const recurringLinks = await db
-    .select()
-    .from(recurringExpenseLinkTable)
-    .where(
-      and(
-        isNull(recurringExpenseLinkTable.nextExpenseCreatedAt),
-        lte(recurringExpenseLinkTable.nextExpenseDate, utcDateFromLocal),
-      ),
-    )
+  const recurringExpenseLinksWithExpensesToCreate =
+    await db.query.recurringExpenseLink.findMany({
+      where: {
+        nextExpenseCreatedAt: {
+          isNull: true,
+        },
+        nextExpenseDate: {
+          lte: utcDateFromLocal,
+        },
+      },
+      with: {
+        currentFrameExpense: {
+          with: {
+            paidBy: true,
+            paidFor: true,
+            category: true,
+            documents: true,
+          },
+        },
+      },
+    })
 
-  for (const recurringLink of recurringLinks) {
-    let newExpenseDate = recurringLink.nextExpenseDate
-    let currentRecurringExpenseLinkId = recurringLink.id
+  for (const recurringExpenseLink of recurringExpenseLinksWithExpensesToCreate) {
+    let newExpenseDate = recurringExpenseLink.nextExpenseDate
 
-    let currentExpenseRecord = await getRecurringExpenseFrame(
-      recurringLink.currentFrameExpenseId,
-    )
-
-    if (!currentExpenseRecord) {
-      continue
-    }
+    let currentExpenseRecord = recurringExpenseLink.currentFrameExpense
+    let currentReccuringExpenseLinkId = recurringExpenseLink.id
 
     while (newExpenseDate < utcDateFromLocal) {
-      const recurrenceRule =
-        (currentExpenseRecord.recurrenceRule as RecurrenceRule | null) ??
-        RecurrenceRule.NONE
-
-      if (recurrenceRule === RecurrenceRule.NONE) {
-        break
+      if (currentExpenseRecord === null) {
+        throw new Error(`Something went wrong: 'currentExpenseRecord' is null`)
       }
 
       const newExpenseId = randomId()
       const newRecurringExpenseLinkId = randomId()
 
       const newRecurringExpenseNextExpenseDate = calculateNextDate(
-        recurrenceRule,
+        currentExpenseRecord.recurrenceRule as RecurrenceRule,
         newExpenseDate,
       )
 
-      const frame = currentExpenseRecord
+      const {
+        category,
+        paidBy,
+        paidFor,
+        documents,
+        ...destructeredCurrentExpenseRecord
+      } = currentExpenseRecord
 
-      const created = await runTransaction(db, async (tx) => {
-        await tx.insert(expenseTable).values({
+      // Use a transacton to ensure that the only one expense is created for the RecurringExpenseLink
+      // just in case two clients are processing the same RecurringExpenseLink at the same time
+
+      const existingExpenseDocumentIds = currentExpenseRecord.documents.map(
+        (document) => document.id,
+      )
+      await db.batch([
+        db.insert(schema.expense).values({
+          ...destructeredCurrentExpenseRecord,
+          createdAt: utcDateFromLocal,
+          categoryId: currentExpenseRecord.categoryId,
+          paidById: currentExpenseRecord.paidById,
           id: newExpenseId,
-          groupId: frame.groupId,
           expenseDate: newExpenseDate,
-          title: frame.title,
-          categoryId: frame.categoryId,
-          amount: frame.amount,
-          originalAmount: frame.originalAmount,
-          originalCurrency: frame.originalCurrency,
-          conversionRate: frame.conversionRate,
-          paidById: frame.paidById,
-          isReimbursement: frame.isReimbursement,
-          splitMode: frame.splitMode,
-          notes: frame.notes,
-          recurrenceRule: frame.recurrenceRule,
-        })
+        }),
+        db.insert(schema.expensePaidFor).values(
+          currentExpenseRecord.paidFor.map((paidFor) => ({
+            expenseId: newExpenseId,
+            participantId: paidFor.participantId,
+            shares: paidFor.shares,
+            documents: existingExpenseDocumentIds,
+          })),
+        ),
+        db
+          .update(schema.expenseDocument)
+          .set({ expenseId: newExpenseId })
+          .where(
+            inArray(
+              schema.expenseDocument.id,
+              currentExpenseRecord.documents.map((document) => document.id),
+            ),
+          ),
+        db.insert(schema.recurringExpenseLink).values({
+          id: newRecurringExpenseLinkId,
+          groupId: currentExpenseRecord.groupId,
+          currentFrameExpenseId: newExpenseId,
+          nextExpenseDate: newRecurringExpenseNextExpenseDate,
+        }),
 
-        if (frame.paidFor.length > 0) {
-          await tx.insert(expensePaidForTable).values(
-            frame.paidFor.map((paidFor) => ({
-              expenseId: newExpenseId,
-              participantId: paidFor.participantId,
-              shares: paidFor.shares,
-            })),
-          )
+        // Mark the RecurringExpenseLink as being "completed" since the new Expense was created
+        // if an expense hasn't been created for this RecurringExpenseLink yet
+        db
+          .update(schema.recurringExpenseLink)
+          .set({
+            nextExpenseCreatedAt: utcDateFromLocal,
+          })
+          .where(
+            and(
+              eq(schema.recurringExpenseLink.id, currentReccuringExpenseLinkId),
+              isNull(schema.recurringExpenseLink.nextExpenseCreatedAt),
+            ),
+          ),
+      ])
+
+      /*
+       if (frame.paidFor.length > 0) {
+          await
         }
 
         if (frame.documentIds.length > 0) {
@@ -944,28 +883,57 @@ async function createRecurringExpenses() {
               isNull(recurringExpenseLinkTable.nextExpenseCreatedAt),
             ),
           )
-        return true
-      }).catch(() => {
-        console.error(
-          'Failed to create recurring expense for expenseId: %s',
-          currentExpenseRecord?.id,
-        )
-        return false
-      })
+       */
 
-      if (!created) {
+      const createdExpense = await getRecurringExpenseFrame(newExpenseId)
+      if (createdExpense === undefined) {
         break
       }
 
-      const nextExpenseRecord = await getRecurringExpenseFrame(newExpenseId)
-      if (!nextExpenseRecord) {
-        break
-      }
-
-      currentExpenseRecord = nextExpenseRecord
-      currentRecurringExpenseLinkId = newRecurringExpenseLinkId
+      // Set the values for the next iteration of the for-loop in case multiple recurring Expenses need to be created
+      currentExpenseRecord = createdExpense
+      currentReccuringExpenseLinkId = newRecurringExpenseLinkId
       newExpenseDate = newRecurringExpenseNextExpenseDate
     }
+  }
+}
+
+async function getRecurringExpenseFrame(expenseId: string) {
+  const db = getDb()
+
+  return db.query.expense.findFirst({
+    where: {
+      id: expenseId,
+    },
+    with: {
+      paidFor: true,
+      documents: true,
+      paidBy: true,
+      category: true,
+    },
+  })
+}
+
+function createPayloadForNewRecurringExpenseLink(
+  recurrenceRule: RecurrenceRule,
+  priorDateToNextRecurrence: Date,
+  groupId: string,
+  expenseId: string,
+): {
+  id: string
+  groupId: string
+  nextExpenseDate: Date
+  currentFrameExpenseId: string
+} {
+  const nextExpenseDate = calculateNextDate(
+    recurrenceRule,
+    priorDateToNextRecurrence,
+  )
+  return {
+    id: randomId(),
+    groupId: groupId,
+    nextExpenseDate: nextExpenseDate,
+    currentFrameExpenseId: expenseId,
   }
 }
 

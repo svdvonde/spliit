@@ -3,12 +3,13 @@
 
 Spliit is a free and open source alternative to Splitwise. This is a fork of the official [Spliit](https://github.com/spliit-app/spliit) project that has been modified to run on the [Cloudflare Workers](https://workers.cloudflare.com/pricing) free tier.
 
-All features of Spliit-on-Cloudflare are intended to be identical to Spliit. Otherwise, I welcome contributions and bug reports that concern my modifications. For problems with Spliit, please refer to the official [Spliit](https://github.com/spliit-app/spliit) project.
+Spliit-on-Cloudflare is intended to be identical to Spliit, with a few quality of life improvements that have not made it into the main project. I welcome contributions and bug reports that concern my modifications. For problems with Spliit, please refer to the official [Spliit](https://github.com/spliit-app/spliit) project.
 
 ## Changes Compared to Spliit
 
 - [x] Based on Spliit `1.19.1`
 - [x] Can run on the Cloudflare free tier.
+- [ ] Import groups that were exported from Spliit, courtesy of [@Uli-Z](https://github.com/Uli-Z/spliit-room/tree/feature/generic-import).
 
 ## Motivation and Use Cases
 
