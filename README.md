@@ -1,19 +1,26 @@
 [<img alt="Spliit" height="60" src="https://github.com/spliit-app/spliit/blob/main/public/logo-with-text.png?raw=true" />](https://spliit.app)
-(on cloudflare)
+(on Cloudflare)
 
 Spliit is a free and open source alternative to Splitwise. This is a fork of the official [Spliit](https://github.com/spliit-app/spliit) project that has been modified to run on the [Cloudflare Workers](https://workers.cloudflare.com/pricing) free tier.
 
-Spliit-on-Cloudflare is intended to be identical to Spliit, with a few quality of life improvements that have not made it into the main project. I welcome contributions and bug reports that concern my modifications. For problems with Spliit, please refer to the official [Spliit](https://github.com/spliit-app/spliit) project.
+Spliit-on-Cloudflare is intended to not deviate too much from standard Spliit. I welcome contributions and bug reports that concern my modifications. For problems with Spliit, please refer to the official [Spliit](https://github.com/spliit-app/spliit) project.
+
+See the difference between Spliit `1.19.1` hosted on Vercel (free tier) vs. Spliit-on-Cloudflare hosted on Cloudflare (free tier).
+
+<img src="./spliit-vs-spliit-on-cloudflare.gif" alt="Comparison gif of Spliit vs Spliit-on-Cloudflare that shows that Spliit takes 5.1 seconds to load a group, versus 0.6 seconds using Spliit-on-Cloudflare."/>
+
 
 ## Changes Compared to Spliit
 
 - [x] Based on Spliit `1.19.1`
 - [x] Can run on the Cloudflare free tier.
-- [x] Import groups from Spliit, functionality courtesy of [@Uli-Z](https://github.com/Uli-Z/spliit-room/tree/feature/generic-import) (who originally created a pull request on Spliit [here](https://github.com/spliit-app/spliit/pull/472)).
+- [x] Import groups from Spliit, functionality courtesy of [@Uli-Z](https://github.com/Uli-Z/spliit-room/tree/feature/generic-import) (adapted for Cloudflare).
 
 ## Motivation and Use Cases
 
-Spliit is easy to deploy on Vercel (free tier) as a NextJS + Postgres application, and it remains the best way to deploy Spliit for most users. The drawback is that the Postgres database on the Vercel free tier makes the application quite slow to use (e.g., installed as a PWA on a mobile device), and I enjoy applications that go fast.
+Spliit is very easy to deploy on Vercel (free tier) as a NextJS + Postgres application, and it remains the best way to deploy Spliit for most users. The drawback is that the Postgres database on the Vercel free tier is slow.
+
+Users who want a better free, self-hosted user experience can run Spliit-on-Cloudflare.
 
 ## Deploy
 
@@ -34,10 +41,9 @@ You can deploy the application on Cloudflare with the following steps.
 
 ## Call For Contributions
 
-I am open to contributions to improve this variant of Spliit.
+I am open to contributions.
 
-- I am specifically looking for ideas or contributions to reduce the bundle size, which seems much larger than is necessary.
-More importantly, it is currently _just shy_ of the maximum of 3MB required for the Cloudflare free tier.
+- Looking for ideas or contributions to reduce Nextjs' bundle size, which is currently _just shy_ of the maximum of 3MB required for the Cloudflare free tier.
 
   ```text
   Total Upload: 10214.37 KiB / gzip: 2961.55 KiB
