@@ -206,7 +206,7 @@ export async function getGroups(groupIds: string[]) {
       .from(schema.group)
       .leftJoin(
         schema.participant,
-        eq(schema.participant.groupId, schema.group.id),
+        eq(schema.group.id, schema.participant.groupId),
       )
       .groupBy(schema.group.id),
   ])
@@ -618,41 +618,17 @@ export async function getGroupExpenses(
       },
     },
     where: {
-      groupId,
+      groupId: groupId,
       title: options?.filter ? { ilike: `%${options.filter}%` } : undefined,
     },
     orderBy: {
       expenseDate: 'desc',
       createdAt: 'desc',
     },
-  })
-
-  const expenseIds = expenses.map((expense) => expense.id)
-
-  const documentsPerExpense = await db
-    .select({
-      expenseId: schema.expense.id,
-      expenseDocumentCount: count(schema.expenseDocument.id),
-    })
-    .from(schema.expense)
-    .where(inArray(schema.expense.id, expenseIds))
-    .leftJoin(
-      schema.expenseDocument,
-      eq(schema.expenseDocument.expenseId, schema.expense.id),
-    )
-    .groupBy(schema.expense.id)
-
-  const documentsPerExpenseMap = new Map(
-    documentsPerExpense.map((obj) => [obj.expenseId, obj.expenseDocumentCount]),
-  )
+  });
 
   return expenses.map((expense) => {
-    const documentCount = documentsPerExpenseMap.get(expense.id)
-    if (documentCount === undefined) {
-      throw new Error(
-        `Could not count the number of documents for expense ${expense.id}`,
-      )
-    }
+    const documentCount = expense.documents.length;
     return {
       ...expense,
       _count: {
