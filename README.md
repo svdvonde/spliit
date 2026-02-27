@@ -7,6 +7,9 @@ Spliit-on-Cloudflare is intended to not deviate too much from standard Spliit. I
 
 See the difference between Spliit `1.19.1` hosted on Vercel (free tier) vs. Spliit-on-Cloudflare hosted on Cloudflare (free tier).
 
+- Spliit load time: `5.1 s`
+- Spliit-on-Cloudflare load time: `0.6 s`
+
 <img src="./spliit-vs-spliit-on-cloudflare.gif" alt="Comparison gif of Spliit vs Spliit-on-Cloudflare that shows that Spliit takes 5.1 seconds to load a group, versus 0.6 seconds using Spliit-on-Cloudflare."/>
 
 
