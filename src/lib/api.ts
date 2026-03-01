@@ -46,7 +46,12 @@ export async function createGroup(groupFormValues: GroupFormValues) {
       : []),
   ]);
 
-  return getGroup(groupId);
+  const group = await getGroup(groupId);
+  if (!group) {
+    throw new Error(`Something went wrong while creating group`);
+  }
+
+  return group;
 }
 
 export async function createExpense(
@@ -548,9 +553,11 @@ export async function getGroup(groupId: string) {
 }
  */
 
-export async function getGroup(groupId: string) {
-  const db = getDb()
-  const group = await db.query.group.findFirst({
+export async function getGroup(
+  groupId: string,
+) {
+  const db = getDb();
+  return db.query.group.findFirst({
     where: {
       id: groupId,
     },
@@ -558,12 +565,6 @@ export async function getGroup(groupId: string) {
       participants: true,
     },
   });
-
-  if (group === undefined) {
-    throw new Error(`Group not found: ${groupId}`);
-  }
-
-  return group;
 }
 
 /*
