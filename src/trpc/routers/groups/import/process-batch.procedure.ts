@@ -16,7 +16,10 @@ export const processBatchProcedure = baseProcedure
     }),
   )
   .mutation(async ({ input: { groupId, expenses } }) => {
-    const group = await getGroup(groupId)
+    const group = await getGroup(groupId);
+    if (!group) {
+      throw new Error(`Could not find group: ${groupId}`);
+    }
 
     const participantIds = new Set(group.participants.map((p) => p.id))
     const createdIds: string[] = []
